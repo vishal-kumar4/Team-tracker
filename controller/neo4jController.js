@@ -97,16 +97,17 @@ const getAllGithubHandles = async(req, res) => {
 
 //API to crawl non existing-submissions for a user
 const addUserSubmissions = async (req, res) => {
+    const codeforcesHandle = req.body.codeforcesHandle;
+    let newSubmissions = [];
+
     try {
-        const codeforcesHandle=req.body.codeforcesHandle;
-        const response = await axios.get("https://codeforces.com/api/user.status?handle=" + codeforcesHandle);
-        const submissions = response.data.result; 
-        // console.log("executing", submissions);
+        const response = await axios.get(`https://codeforces.com/api/user.status?handle=${codeforcesHandle}`);
+        const submissions = response.data.result;
 
         for (const submission of submissions) {
-            let { id, contestId, problem: { rating, name: problemName, index }, verdict } = submission;
+            const { id, contestId, problem: { rating = 0, name: problemName, index }, verdict } = submission;
             const problemId = `${contestId}${index}`;
-            rating=!rating?0:rating;
+
             // Check if the submission with the same problemId already exists
             const submissionExists = await session.run(
                 `MATCH (c:Codeforces {handle: $codeforcesHandle})-[:PARTICIPATED_IN]->(s:Submission {submissionId: $id}) RETURN s`,
@@ -139,11 +140,23 @@ const addUserSubmissions = async (req, res) => {
                     verdict 
                 }
             );
+
+            // Add the new submission to the newSubmissions array
+            newSubmissions.push({
+                submissionId: id,
+                rating,
+                contestId,
+                problemName,
+                problemId,
+                verdict
+            });
         }
-        console.log(`All submissions crawled for ${codeforcesHandle}`);
-        res.json({status: "success", totalSubmissions: submissions.length, submissions: submissions})
+
+        console.log(`New submissions for ${codeforcesHandle}:`, newSubmissions);
+        res.json({ status: "successfully fetched the submission", newSubmissions });
     } catch (error) {
         console.error('Error adding submissions:', error.message);
+        res.status(500).send('Internal Server Error');
     }
 };
 

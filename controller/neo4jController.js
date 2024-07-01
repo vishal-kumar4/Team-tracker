@@ -40,21 +40,21 @@ const addUser = async (req, res) => {
         // Create the Codeforces node and connect it to the User node
         await session.run(
             `MATCH (u:User {name: $name})
-             CREATE (u)-[:HAS_CODEFORCES]->(c:Codeforces {handle: $codeforcesHandle})`,
+             CREATE (u)-[:WITH_CODEFORCES]->(c:Codeforces {handle: $codeforcesHandle})`,
             { name, codeforcesHandle }
         );
 
         // Create the GitHub node and connect it to the User node
         await session.run(
             `MATCH (u:User {name: $name})
-             CREATE (u)-[:HAS_GITHUB]->(g:GitHub {handle: $githubHandle})`,
+             CREATE (u)-[:WITH_GITHUB]->(g:GitHub {handle: $githubHandle})`,
             { name, githubHandle }
         );
 
         // Create the Team node and connect it to the User node
         await session.run(
             `MATCH (u:User {name: $name})
-             CREATE (u)-[:HAS_TEAM]->(t:Team {name: $team})`,
+             CREATE (u)-[:WITH_TEAM]->(t:Team {name: $team})`,
             { name, team }
         );
 
@@ -69,7 +69,7 @@ const addUser = async (req, res) => {
 const getAllCodeforcesHandles = async(req, res) => {
     try {
         const result = await session.run(
-            'MATCH (:User)-[:HAS_CODEFORCES]->(c:Codeforces) RETURN c.handle AS handle'
+            'MATCH (:User)-[:WITH_CODEFORCES]->(c:Codeforces) RETURN c.handle AS handle'
         );
         const handles = result.records.map(record => record.get('handle'));
 
@@ -84,7 +84,7 @@ const getAllCodeforcesHandles = async(req, res) => {
 const getAllGithubHandles = async(req, res) => {
     try {
         const result = await session.run(
-            'MATCH (:User)-[:HAS_GITHUB]->(g:GitHub) RETURN g.handle AS handle'
+            'MATCH (:User)-[:WITH_GITHUB]->(g:GitHub) RETURN g.handle AS handle'
         );
         const handles = result.records.map(record => record.get('handle'));
 
@@ -164,7 +164,7 @@ const addUserSubmissions = async (req, res) => {
 const teamData = async (req, res) => {
     try {
         const result = await session.run(
-            `MATCH (u:User)-[:HAS_CODEFORCES]->(c:Codeforces), (u)-[:HAS_TEAM]->(t:Team)
+            `MATCH (u:User)-[:WITH_CODEFORCES]->(c:Codeforces), (u)-[:WITH_TEAM]->(t:Team)
              RETURN u.name AS name, c.handle AS codeforcesHandle, t.name AS teamName`
         );
 
@@ -184,8 +184,8 @@ const teamData = async (req, res) => {
 const getTeamSubmissions = async (req, res) => {
     try {
         const result = await session.run(
-            `MATCH (u:User)-[:HAS_TEAM]->(t:Team),
-                   (u)-[:HAS_CODEFORCES]->(c:Codeforces)-[:PARTICIPATED_IN]->(s:Submission)
+            `MATCH (u:User)-[:WITH_TEAM]->(t:Team),
+                   (u)-[:WITH_CODEFORCES]->(c:Codeforces)-[:PARTICIPATED_IN]->(s:Submission)
              RETURN u.name AS name, t.name AS teamName, collect({
                  contestId: s.contestId,
                  rating: s.rating,

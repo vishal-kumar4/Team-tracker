@@ -22,12 +22,12 @@ const addUser = async (req, res) => {
         );
 
         if (codeforcesResult.records.length > 0) {
-            res.status(400).send('Codeforces handle already exists');
+            res.json({"status": `Codeforces User handle already exists ${codeforcesHandle}`});
             return;
         }
 
         if (githubResult.records.length > 0) {
-            res.status(400).send('GitHub handle already exists');
+            res.json({"status": `Github User handle already exists ${githubHandle}`});
             return;
         }
 

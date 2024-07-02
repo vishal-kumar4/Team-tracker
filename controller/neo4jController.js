@@ -96,6 +96,70 @@ const getAllGithubHandles = async(req, res) => {
 };
 
 //API to crawl non existing-submissions for a user
+// const addUserSubmissions = async (req, res) => {
+//     const codeforcesHandle = req.body.codeforcesHandle;
+//     let newSubmissions = [];
+
+//     try {
+//         const response = await axios.get(`https://codeforces.com/api/user.status?handle=${codeforcesHandle}`);
+//         const submissions = response.data.result;
+
+//         for (const submission of submissions) {
+//             const { id, contestId, problem: { rating = 0, name: problemName, index }, verdict } = submission;
+//             const problemId = `${contestId}${index}`;
+
+//             // Check if the submission with the same problemId already exists
+//             const submissionExists = await session.run(
+//                 `MATCH (c:Codeforces {handle: $codeforcesHandle})-[:SUBMITTED]->(s:Submission {submissionId: $id}) RETURN s`,
+//                 { codeforcesHandle, id }
+//             );
+
+//             if (submissionExists.records.length > 0) {
+//                 console.log(`Submission with submissionId ${id} already exists`);
+//                 continue;
+//             }
+
+//             // Create the Submission node if it doesn't exist
+//             await session.run(
+//                 `MATCH (c:Codeforces {handle: $codeforcesHandle})
+//                  CREATE (c)-[:SUBMITTED]->(s:Submission {
+//                     submissionId: $id,
+//                     rating: $rating,
+//                     contestId: $contestId,
+//                     problemName: $problemName,
+//                     problemId: $problemId,
+//                     verdict: $verdict
+//                 })`,
+//                 { 
+//                     codeforcesHandle,
+//                     id,
+//                     rating, 
+//                     contestId, 
+//                     problemName, 
+//                     problemId, 
+//                     verdict 
+//                 }
+//             );
+
+//             // Add the new submission to the newSubmissions array
+//             newSubmissions.push({
+//                 submissionId: id,
+//                 rating,
+//                 contestId,
+//                 problemName,
+//                 problemId,
+//                 verdict
+//             });
+//         }
+
+//         console.log(`New submissions for ${codeforcesHandle}:`, newSubmissions);
+//         res.json({ status: "successfully fetched the submission", newSubmissions });
+//     } catch (error) {
+//         console.error('Error adding submissions:', error.message);
+//         res.status(500).send('Internal Server Error');
+//     }
+// };
+
 const addUserSubmissions = async (req, res) => {
     const codeforcesHandle = req.body.codeforcesHandle;
     let newSubmissions = [];
@@ -105,12 +169,12 @@ const addUserSubmissions = async (req, res) => {
         const submissions = response.data.result;
 
         for (const submission of submissions) {
-            const { id, contestId, problem: { rating = 0, name: problemName, index }, verdict } = submission;
+            const { id, contestId, creationTimeSeconds, problem: { rating = 0, name: problemName, index, tags }, verdict } = submission;
             const problemId = `${contestId}${index}`;
 
             // Check if the submission with the same problemId already exists
             const submissionExists = await session.run(
-                `MATCH (c:Codeforces {handle: $codeforcesHandle})-[:PARTICIPATED_IN]->(s:Submission {submissionId: $id}) RETURN s`,
+                `MATCH (c:Codeforces {handle: $codeforcesHandle})-[:SUBMITTED]->(s:Submission {submissionId: $id}) RETURN s`,
                 { codeforcesHandle, id }
             );
 
@@ -122,13 +186,14 @@ const addUserSubmissions = async (req, res) => {
             // Create the Submission node if it doesn't exist
             await session.run(
                 `MATCH (c:Codeforces {handle: $codeforcesHandle})
-                 CREATE (c)-[:PARTICIPATED_IN]->(s:Submission {
+                 CREATE (c)-[:SUBMITTED]->(s:Submission {
                     submissionId: $id,
                     rating: $rating,
                     contestId: $contestId,
                     problemName: $problemName,
                     problemId: $problemId,
-                    verdict: $verdict
+                    verdict: $verdict,
+                    creationTimeSeconds: $creationTimeSeconds
                 })`,
                 { 
                     codeforcesHandle,
@@ -137,9 +202,20 @@ const addUserSubmissions = async (req, res) => {
                     contestId, 
                     problemName, 
                     problemId, 
-                    verdict 
+                    verdict,
+                    creationTimeSeconds
                 }
             );
+
+            // Create Tag nodes and connect them to the Submission node
+            for (const tag of tags) {
+                await session.run(
+                    `MERGE (t:Tag {name: $tagName})
+                     MERGE (s:Submission {submissionId: $id})
+                     MERGE (s)-[:TAGGED_WITH]->(t)`,
+                    { tagName: tag, id }
+                );
+            }
 
             // Add the new submission to the newSubmissions array
             newSubmissions.push({
@@ -148,17 +224,20 @@ const addUserSubmissions = async (req, res) => {
                 contestId,
                 problemName,
                 problemId,
-                verdict
+                verdict,
+                creationTimeSeconds,
+                tags
             });
         }
 
         console.log(`New submissions for ${codeforcesHandle}:`, newSubmissions);
-        res.json({ status: "successfully fetched the submission", newSubmissions });
+        res.json({ status: "successfully fetched the submission", newSubmissions, totalSubmissions: newSubmissions.length });
     } catch (error) {
         console.error('Error adding submissions:', error.message);
         res.status(500).send('Internal Server Error');
     }
 };
+
 
 //API that sends team, user's name and codeforcesHandle
 const teamData = async (req, res) => {
@@ -185,7 +264,7 @@ const getTeamSubmissions = async (req, res) => {
     try {
         const result = await session.run(
             `MATCH (u:User)-[:WITH_TEAM]->(t:Team),
-                   (u)-[:WITH_CODEFORCES]->(c:Codeforces)-[:PARTICIPATED_IN]->(s:Submission)
+                   (u)-[:WITH_CODEFORCES]->(c:Codeforces)-[:SUBMITTED]->(s:Submission)
              RETURN u.name AS name, t.name AS teamName, collect({
                  contestId: s.contestId,
                  rating: s.rating,

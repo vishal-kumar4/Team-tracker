@@ -16,17 +16,24 @@ app.listen(3000, ()=>{
 })
 
 const connectToDb = require("./config/connectToDb");
+const { Scheduler } = require('./Scheduler/Scheduler');
+const { updateAllUserSubmissions } = require('./Jobs/updateAllUserSubmissionsJob');
 
 //call the function for db connects
-connectToDb.connectToNeo4j();
+connectToDb.connectToNeo4j().then(() => {
+    const scheduler = new Scheduler("0 10 * * *", updateAllUserSubmissions);
+    scheduler.schedule()
+});
 
 const userController = require('./controller/neo4jController');
 
 //Routes for API'S
 app.post("/codeforces/user/addUser", userController.addUser);
-app.post('/codeforces/user/addSubmissions', userController.addUserSubmissions);
+app.post('/codeforces/user/updateSubmissions', userController.addUserSubmissions);
 app.get('/codeforces/user/all', userController.getAllCodeforcesHandles);
+// app.post('/codeforces/user/all/updateSubmissions', userController.updateAllUserSubmissions);
 app.get('/codeforces/team/allUsers', userController.teamData);
 app.get('/codeforces/team/allSubmissions', userController.getTeamSubmissions);
+app.get('/codeforces/team/allAccSubmissions', userController.getAcceptedSubumissions);
 
 app.get('/github/user/all', userController.getAllGithubHandles);

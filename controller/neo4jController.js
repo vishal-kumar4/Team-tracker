@@ -270,7 +270,8 @@ const getTeamSubmissions = async (req, res) => {
                  rating: s.rating,
                  problemName: s.problemName,
                  problemId: s.problemId,
-                 verdict: s.verdict
+                 verdict: s.verdict,
+                 creationTimeSeconds: s.creationTimeSeconds
              }) AS submissions`
         );
 
@@ -286,4 +287,73 @@ const getTeamSubmissions = async (req, res) => {
     }
 };
 
-module.exports = { addUser, getAllCodeforcesHandles, getAllGithubHandles, addUserSubmissions, teamData, getTeamSubmissions };
+const getAcceptedSubumissions = async (req, res) =>{
+    const cutoffDate = new Date('2024-06-17').getTime() / 1000;
+    try {
+        const result = await session.run(`
+            MATCH (u:User)-[:WITH_CODEFORCES]->(c:Codeforces)-[:SUBMITTED]->(s:Submission),
+                  (u)-[:WITH_TEAM]->(t:Team)
+            WHERE s.verdict = 'OK' AND s.creationTimeSeconds > $cutoffDate
+            RETURN u.name AS userName, c.handle AS codeforcesHandle, 
+                   t.name AS teamName, s.rating AS rating, 
+                   s.problemId AS problemId, s.problemName AS problemName, 
+                   s.submissionId AS submissionId
+            ORDER BY s.rating
+        `, { cutoffDate });
+
+        const records = result.records;
+
+        const users = {};
+
+        records.forEach(record => {
+            let userName = record.get('userName');
+            userName=userName.trim()+'';
+            const codeforcesHandle = record.get('codeforcesHandle');
+            const teamName = record.get('teamName');
+            const rating = record.get('rating');
+            const problemId = record.get('problemId');
+            const problemName = record.get('problemName');
+            const submissionId = record.get('submissionId');
+
+            if (!users[userName]) {
+                users[userName] = {
+                    codeforcesHandle,
+                    team: teamName,
+                    submissions: {}
+                };
+            }
+
+            if (!users[userName].submissions[rating]) {
+                users[userName].submissions[rating] = {};
+            }
+
+            // Ensure no duplicate submissions for the same problemId
+            if (!users[userName].submissions[rating][problemId]) {
+                users[userName].submissions[rating][problemId] = {
+                    problemName,
+                    problemId,
+                    submissionId
+                };
+            }
+        });
+
+        // Transform the submissions object to an array
+        Object.keys(users).forEach(userName => {
+            const userSubmissions = users[userName].submissions;
+            const transformedSubmissions = {};
+
+            Object.keys(userSubmissions).forEach(rating => {
+                transformedSubmissions[rating] = Object.values(userSubmissions[rating]);
+            });
+            users[userName].submissions = transformedSubmissions;
+        });
+
+        res.json(users);
+        console.log("all the submissions grouped by the ratings have been sent .... ", users)
+    } catch (error) {
+        console.error('Error fetching accepted submissions:', error);
+        res.status(500).send('Internal Server Error');
+    }
+};
+
+module.exports = { addUser, getAllCodeforcesHandles, getAllGithubHandles, addUserSubmissions, teamData, getTeamSubmissions, getAcceptedSubumissions };

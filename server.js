@@ -1,19 +1,31 @@
 const express=require('express');
-
 const app=express();
 
 require('dotenv').config();
+app.use(express.json());
 
-app.use(express.json())
+// Creating a limiter by calling rateLimit function with options:
+// max contains the maximum number of request and windowMs
+// contains the time in millisecond so only max amount of
+// request can be made in windowMS time.
+const rateLimit = require("express-rate-limit");
+const limiter = rateLimit({
+    max: 200,
+    windowMs: 60 * 60 * 1000,
+    message: "Too many request from this IP"
+});
+// Add the limiter function to the express middleware
+// so that every request coming from user passes
+// through this middleware.
+app.use(limiter);
 
-
-const cors = require('cors')
-
+//for cross origin requests
+const cors = require('cors');
 app.use(cors()) // Use this after the variable declaration
 
 app.listen(3000, ()=>{
     console.log('server is running on port 3000');
-})
+});
 
 const connectToDb = require("./config/connectToDb");
 const { Scheduler } = require('./Scheduler/Scheduler');
@@ -26,14 +38,9 @@ connectToDb.connectToNeo4j().then(() => {
 });
 
 const userController = require('./controller/neo4jController');
-
 //Routes for API'S
 app.post("/codeforces/user/addUser", userController.addUser);
-app.post('/codeforces/user/updateSubmissions', userController.addUserSubmissions);
-app.get('/codeforces/user/all', userController.getAllCodeforcesHandles);
-// app.post('/codeforces/user/all/updateSubmissions', userController.updateAllUserSubmissions);
-app.get('/codeforces/team/allUsers', userController.teamData);
-app.get('/codeforces/team/allSubmissions', userController.getTeamSubmissions);
-app.get('/codeforces/team/allAccSubmissions', userController.getAcceptedSubumissions);
+app.get('/codeforces/user/all/handles', userController.getAllUsersDetails);
+app.get('/codeforces/user/all/submissions', userController.getAllSubmissions);
+app.get('/codeforces/user/all/distinctAccSubmissionsAfter18June', userController.getDistinctAcceptedSubmissionsAfter18June);
 
-app.get('/github/user/all', userController.getAllGithubHandles);

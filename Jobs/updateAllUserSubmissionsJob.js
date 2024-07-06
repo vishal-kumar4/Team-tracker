@@ -1,10 +1,10 @@
 const driver = require('../config/connectToDb').driver
 const session =driver.session();
 
-const axios = require('axios')
+const axios = require('axios');
 
 const updateAllUserSubmissions = async () => {
-    console.log("job started .... .. . . ");
+    console.log("job started ... .. .");
     try {
         console.log("started ... ")
         // Step 1: Fetch all users and their Codeforces handles
@@ -17,6 +17,7 @@ const updateAllUserSubmissions = async () => {
             userName: record.get('userName'),
             codeforcesHandle: record.get('codeforcesHandle')
         }));
+
         if(users.length==0 || !users)
         {
             // res.json({"status":"OK", "message": "no users found to fetch submissions"});
@@ -57,7 +58,9 @@ const updateAllUserSubmissions = async () => {
             for (const submission of submissions) {
                 let { id, contestId, creationTimeSeconds, problem: { rating = 0, name: problemName, index, tags = [] }, verdict } = submission;
                 const problemId = `${contestId}${index}`;
+
                 contestId=!contestId?"0":contestId;
+                rating=!rating?"0":rating;
 
                 // Check if the submission with the same submissionId already exists
                 const submissionExists = await session.run(
@@ -116,6 +119,7 @@ const updateAllUserSubmissions = async () => {
                 console.log(`${newSubmissions.length} New submissions added for ${codeforcesHandle}`);
             }
         }
+        updateCrawlTime();
         console.log("Submissions updated for all users.");
         // res.json({ status: "success", message: "Submissions updated for all users."});
     } catch (error) {
@@ -124,4 +128,21 @@ const updateAllUserSubmissions = async () => {
     }
 }
 
-module.exports = {updateAllUserSubmissions}
+const updateCrawlTime = async () => {
+    try {
+        // Assuming you have a middleware or method to get codeforcesHandle from req.body or req.params
+        const codeforcesHandle = "vishalkuma4180"; // or req.params.codeforcesHandle
+        const result = await session.run(
+            `MATCH (u:User)-[:WITH_CODEFORCES]->(c:Codeforces {handle: $codeforcesHandle})
+             MERGE (u)-[:LAST_CRAWL]->(lc:CrawlTime)
+             SET lc.time = (timestamp()+"")
+             RETURN lc`,
+            { codeforcesHandle }
+        );
+    console.log(`Last crawled on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`);
+    } catch (error) {
+            console.error('Error updating last crawl time:', error);
+        }
+};
+
+module.exports = {updateAllUserSubmissions, updateCrawlTime};

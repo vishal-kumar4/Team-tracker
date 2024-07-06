@@ -212,4 +212,27 @@ const getDistinctAcceptedSubmissionsAfter18June = async (req, res) => {
     }
 };
 
-module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June}
+const getLastCrawlTimestamp = async (req, res) => {
+    try {
+        const codeforcesHandle = "vishalkuma4180" // Assuming codeforcesHandle is passed in the request body
+
+        // Run the Cypher query to fetch the timestamp for LastCrawl node
+        const result = await session.run(
+            `MATCH (u:User)-[:WITH_CODEFORCES]->(c:Codeforces {handle: $codeforcesHandle}),
+                   (u)-[:LAST_CRAWL]->(t:CrawlTime)
+             RETURN t`,
+            { codeforcesHandle }
+        );
+        if (result.records.length > 0) {
+            res.json({Status: "OK", Message: "Fetched last crawl time for codeforces" , LastCrawlTimeStamp: result.records[0]._fields[0].properties.time});
+        } else {
+            res.status(404).json({ error: `No LastCrawl node found for handle ${codeforcesHandle}` });
+        }
+    } catch (error) {
+        console.error('Error fetching last crawl timestamp:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+
+module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp}

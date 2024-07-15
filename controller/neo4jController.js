@@ -3,6 +3,8 @@ const session =driver.session();
 
 const axios = require('axios');
 
+const normalizeLink = require('../utils/utilFunctions').normalizeLink;
+
 //API to add a new user with 4 required fields
 const addUser = async (req, res) => {
     let { name, codeforcesHandle, githubHandle, team } = req.body;
@@ -125,7 +127,7 @@ const getAllSubmissions = async (req, res) => {
 
 //API to get All the distinct accepted submissions after 18th june for all users
 const getDistinctAcceptedSubmissionsAfter18June = async (req, res) => {
-    const cutoffDate = new Date('2024-06-17').getTime() / 1000;
+    const cutoffDate = new Date('2024-06-18').getTime() / 1000;
     try {
         // Fetch all users with their teams
         const usersResult = await session.run(`
@@ -234,5 +236,64 @@ const getLastCrawlTimestamp = async (req, res) => {
     }
 };
 
+const addProblems = async (req, res) => {
+    const problems = req.body; // Assuming req.body is an array of JSON objects [{ problemId, link }, { problemId, link }, ...]
+    try {
+        const addedLinks = [];
+        
+        for (const problem of problems) {
+            const problemLink  = problem.problem;
 
-module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp}
+            const link = normalizeLink(problemLink);
+
+            const splitArr = link.split("/");
+            const problemId = splitArr[splitArr.length - 2] + "" + splitArr[splitArr.length - 1];
+
+            // Create or merge Problem node with a unique constraint on link
+            const result = await session.run(
+                `MERGE (p:Problem { link: $link })
+                 ON CREATE SET p.problemId = $problemId
+                 RETURN p`,
+                { link, problemId }
+            );
+
+            // Assuming you have a way to identify the CodeforcesSite node, e.g., siteName
+            const siteName = 'CODEFORCES'; // Replace with actual identifier
+
+            // Create or match CodeforcesSite node
+            await session.run(
+                `MERGE (s:CodeforcesSite { handle: $siteName })
+                 WITH s
+                 MATCH (p:Problem { link: $link })
+                 MERGE (s)-[:WITH_LINK]->(p)`,
+                { siteName, link }
+            );
+
+            addedLinks.push(link); // Collect successfully added links
+        }
+        console.log(`Problems adedd successfully ... `);
+        res.json({Status: "OK", Message: "Added problems succesfully", Links: addedLinks});
+    } catch (error) {
+        console.error('Error adding problems:', error);
+        res.status(500).json({ error: 'Failed to add problems' });
+    }
+}
+
+const getAddedProblems = async (req, res) => {
+    try {
+        const result = await session.run(
+            'MATCH (site:CodeforcesSite)-[:WITH_LINK]->(problem:Problem) RETURN problem.problemId AS problemId, problem.link AS problemLink'
+        );
+    
+        const problems = result.records.map(record => ({
+            problemId: record.get('problemId'),
+            problemLink: record.get('problemLink')
+        }));
+    
+        res.json(problems);
+    } catch (error) {
+        console.error('Error fetching problem details:', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp, addProblems, getAddedProblems}

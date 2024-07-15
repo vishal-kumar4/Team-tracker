@@ -38,9 +38,12 @@ connectToDb.connectToNeo4j().then(() => {
 });
 
 const userController = require('./controller/neo4jController');
+
 //Routes for API'S
 app.post("/codeforces/user/addUser", userController.addUser);
+app.post("/codeforces/add", userController.addProblems);
 app.get('/codeforces/user/all/handles', userController.getAllUsersDetails);
 app.get('/last-crawl-time', userController.getLastCrawlTimestamp);
 app.get('/codeforces/user/all/submissions', userController.getAllSubmissions);
 app.get('/codeforces/user/all/distinctAccSubmissionsAfter18June', userController.getDistinctAcceptedSubmissionsAfter18June);
+app.get('/codeforces/problems', userController.getAddedProblems);

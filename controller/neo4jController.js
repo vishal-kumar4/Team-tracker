@@ -5,6 +5,8 @@ const axios = require('axios');
 
 const normalizeLink = require('../utils/utilFunctions').normalizeLink;
 
+const sendEmail = require('../Jobs/automateMail');
+const { getRank } = require('../utils/utilFunctions');
 //API to add a new user with 4 required fields
 const addUser = async (req, res) => {
     let { name, codeforcesHandle, githubHandle, team } = req.body;
@@ -296,4 +298,122 @@ const getAddedProblems = async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 }
-module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp, addProblems, getAddedProblems}
+
+const updateRatings = async (req, res) => {
+    // const users1 = req.body;
+    try{
+        console.log("started ... ");
+        // Step 1: Fetch all users and their Codeforces handles
+        const usersResult = await session.run(`
+            MATCH (u:User)-[:WITH_CODEFORCES]->(c:Codeforces)
+            RETURN u.name AS userName, c.handle AS codeforcesHandle
+        `);
+
+        let users = usersResult.records.map(record => ({
+            userName: record.get('userName'),
+            codeforcesHandle: record.get('codeforcesHandle')
+        }));
+
+        if(users.length==0 || !users)
+        {
+            console.log("no users found");
+            return;
+        }
+
+        if (!Array.isArray(users) || users.length === 0) {
+            return res.status(400).json({
+              error: "Invalid input. Provide an array of users with fields: handle, rating, maxRating, and rank.",
+            });
+          }
+
+          
+        
+        for(const user of users)
+        {
+            const codeforcesHandle = user.codeforcesHandle;
+            const response = await axios.get(`https://codeforces.com/api/user.info?handles=${codeforcesHandle}`);
+
+            const { handle, rating, maxRating, rank } = response.data.result[0];
+            // break;
+            
+            if (!handle || rating == null || maxRating == null || rank == null) {
+                console.error(`Skipping user with missing fields: ${JSON.stringify(user)}`);
+                continue;
+            }
+            const query = `
+            MATCH (c:Codeforces {handle: $handle})
+            MERGE (c)-[:HAS_RATING]->(r:Rating)
+            SET r.rating = $rating,
+            r.rank = $rank
+            WITH r, r.maxRating AS previousMaxRating, $maxRating AS newMaxRating
+            WHERE newMaxRating > coalesce(previousMaxRating, 0)
+            SET r.maxRating = newMaxRating
+            RETURN previousMaxRating, r.maxRating AS updatedMaxRating, r.rank AS currentRank
+            `;
+            
+              const result = await session.run(query, {
+                handle,
+                rating,
+                maxRating,
+                rank,
+              });
+          
+              // Check if maxRating was updated
+              if (result.records.length > 0) {
+                const record = result.records[0];
+                const previousMaxRating = record.get("previousMaxRating");
+                const updatedMaxRating = record.get("updatedMaxRating");
+                const currentRank = record.get("currentRank");
+                const currentRating  = rating;
+
+                const rank = getRank(currentRating, previousMaxRating);
+                console.log("houle", rank);
+          
+                if ( (updatedMaxRating > (previousMaxRating || 0)) && rank) {
+                    const name = handle;
+                    const userMail = 'QUERY TO GET THE USER MAIL FOR given handle from neo4j';
+
+                  console.log(`Max rating updated from ${previousMaxRating || 0} to ${updatedMaxRating} for handle: ${handle}`);
+                  const textMessage = `
+                    Congratulations, ${name}! 🎉 on becoming ${rank}
+
+                    What an incredible milestone in your coding journey! 🌟 You've worked tirelessly and your dedication has led you to this fantastic new rank — we couldn't be more excited for you! 🚀 Your passion and persistence are truly inspiring!
+
+                    You've set a high standard for yourself, and this achievement is just the beginning. The sky’s the limit — keep soaring higher and pushing the boundaries of what’s possible! 💪
+
+                    Best regards,
+                    Being Zero Team,
+                    Powerful Yet Humble
+                    `;
+                    // HTML message with <br> for new lines
+                    const htmlMessage = `
+                    <p><strong>Congratulations ${name} ! 🎉</strong> on getting ${rank} Title on Codeforces</p>
+
+                    <p>What an incredible milestone in your coding journey! 🌟 You've worked tirelessly and your dedication has led you to this fantastic new rank — we couldn't be more excited for you! 🚀 Your passion and persistence are truly inspiring!</p>
+
+                    <p>You've set a high standard for yourself, and this achievement is just the beginning. The sky’s the limit — keep soaring higher and pushing the boundaries of what’s possible! 💪</p>
+                    
+                    <p>Best regards,<br><strong>Being Zero Team,</strong> <br> <i>Powerful Yet Humble</i></p>
+                    `;
+                  
+                    sendEmail(`${userMail}`, '🎉 Congratulations on Reaching New Heights in Your Coding Journey! 🚀', textMessage, htmlMessage)
+                    .then(() => {
+                        console.log(`Email sent for acheiving higher rank to ${handle}!`);
+                    })
+                    .catch((error) => {
+                        console.error('Error:', error);
+                    });
+                }
+                console.log(`Current rank for handle ${handle}: ${currentRank}`);
+              }
+              console.log({ message: `Rating node updated successfully for ${handle}` });
+            }
+        res.status(200).json({ message: "Ratings updated successfully for all users." });
+    }
+    catch(error)
+    {
+        console.error("Error updating rating:", error);
+        res.status(500).json({ error: "Internal server error." });
+    }
+}
+module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp, addProblems, getAddedProblems, updateRatings};

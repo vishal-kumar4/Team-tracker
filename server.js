@@ -33,7 +33,7 @@ const { updateAllUserSubmissions } = require('./Jobs/updateAllUserSubmissionsJob
 
 //call the function for db connects
 connectToDb.connectToNeo4j().then(() => {
-    const scheduler = new Scheduler("0 17 * * *", updateAllUserSubmissions);
+    const scheduler = new Scheduler("56 14 * * *", updateAllUserSubmissions);
     scheduler.schedule()
 });
 
@@ -42,6 +42,7 @@ const userController = require('./controller/neo4jController');
 //Routes for API'S
 app.post("/codeforces/user/addUser", userController.addUser);
 app.post("/codeforces/add", userController.addProblems);
+app.post("/codeforces/rating", userController.updateRatings);
 app.get('/codeforces/user/all/handles', userController.getAllUsersDetails);
 app.get('/last-crawl-time', userController.getLastCrawlTimestamp);
 app.get('/codeforces/user/all/submissions', userController.getAllSubmissions);

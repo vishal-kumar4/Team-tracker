@@ -299,6 +299,21 @@ const getAddedProblems = async (req, res) => {
     }
 }
 
+    const problemsList = async (req, res) => {
+        const session = driver.session();
+        try {
+            const result = await session.run('MATCH (p:Problem) RETURN p.link AS link, p.problemId AS problemId');
+            const problems = result.records.map(record => ({
+                link: record.get('link'),
+                problemId: record.get('problemId')
+            }));
+            res.json(problems);
+        } catch (error) {
+            console.error('Error fetching problems:', error);
+            res.status(500).send('Error fetching problems');
+        }
+    };
+
 const updateRatings = async (req, res) => {
     // const users1 = req.body;
     try{
@@ -416,4 +431,47 @@ const updateRatings = async (req, res) => {
         res.status(500).json({ error: "Internal server error." });
     }
 }
-module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp, addProblems, getAddedProblems, updateRatings};
+
+// API endpoint to get users and problemIds with verdict as "OK" and existing in Problem node
+const userProblemMap = async (req, res) => {
+
+    try {
+        // First, get all users
+        const userQuery = `MATCH (u:User) RETURN u.name AS userName`;
+        const userResult = await session.run(userQuery);
+        
+        // Create a map for users with empty problem ID arrays
+        const userMap = {};
+        userResult.records.forEach(record => {
+            const userName = record.get('userName');
+            userMap[userName] = []; // Initialize with empty array
+        });
+
+        // Now get submissions for users with 'OK' verdict
+        const submissionQuery = `
+            MATCH (u:User)-[:WITH_CODEFORCES]->(c:Codeforces)-[:SUBMITTED]->(s:Submission)
+            MATCH (p:Problem {problemId: s.problemId}) // Ensure problemId exists in Problem
+            WHERE s.verdict = 'OK'
+            RETURN u.name AS userName, COLLECT(s.problemId) AS problemIds
+        `;
+        const submissionResult = await session.run(submissionQuery);
+
+        // Populate the userMap with actual problem IDs
+        submissionResult.records.forEach(record => {
+            const userName = record.get('userName');
+            const problemIds = record.get('problemIds') || []; // Gets the problem IDs, can be empty
+
+            if (userMap[userName]) {
+                userMap[userName] = problemIds; // Assign the IDs to the user
+            }
+        });
+
+        // Return the user map as JSON
+        return res.json(userMap);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            return res.status(500).json({ error: 'Internal Server Error' });
+        }
+    };
+
+module.exports = {addUser, getAllUsersDetails, getAllSubmissions, getDistinctAcceptedSubmissionsAfter18June, getLastCrawlTimestamp, addProblems, getAddedProblems, updateRatings, problemsList, userProblemMap};

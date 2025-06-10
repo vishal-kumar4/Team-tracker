@@ -48,3 +48,7 @@ app.get('/last-crawl-time', userController.getLastCrawlTimestamp);
 app.get('/codeforces/user/all/submissions', userController.getAllSubmissions);
 app.get('/codeforces/user/all/distinctAccSubmissionsAfter18June', userController.getDistinctAcceptedSubmissionsAfter18June);
 app.get('/codeforces/problems', userController.getAddedProblems);
+
+app.get('/codeforces/getAllProblem', userController.problemsList);
+
+app.get('/userProblemMap', userController.userProblemMap);
